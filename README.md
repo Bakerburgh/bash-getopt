@@ -17,8 +17,8 @@ This provides parsing and validation, as well as a nice `usage` function.
 ```
 	~/code/bash-getopt$ ./mk_opt --help
 	  Usage: mk_opt [options]
-
-	  Purge teams from the database that have been scheduled for deletion.
+          
+          Example usage text.
 	  
 	  Options:
 	     -a --arga <N>    This has a required argument
