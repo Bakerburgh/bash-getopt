@@ -1,0 +1,160 @@
+#!/bin/bash
+
+# ==== usage() ====
+# Print help text to stdout
+function usage() {
+    FMT="%-${OPT_MAP_USAGE_SHORT_LEN}s"
+cat << EOF 
+  Usage: $(basename $0) [options]
+
+  Purge teams from the database that have been scheduled for deletion.
+  
+  Options:
+EOF
+    echo -e "$USAGE" | column -t -s "~!~" | sed 's/^/    /'
+}
+
+# ==== cb_argb ===
+# Callback that is automatically called if the --argb option is present
+function cb_argb() {
+    if [ -n "$1" ]; then
+        VALUE_B=$1
+    else
+        VALUE_B="DEFAULT"
+    fi
+}
+
+# ==== cb_argd ===
+# Callback that is automatically called if the --argd option is present
+function cb_argd() {
+    VALUE_D=$1
+}
+
+# ==== cb_help ===
+# Callback that is automatically called if the --help option is present
+function cb_help() {
+    usage
+    exit
+}
+
+
+# Set up maps to define different aspects of each option
+declare -A OPT_MAP_ALIAS    # Map the short option ("-h") to the long option ("--help")
+declare -A OPT_MAP_SHORT    # Reverse map from long ("--help") to short ("-h")
+declare -A OPT_MAP_CALLBACK # Map of the callback for each option ("--help") to ("cb_help ")
+declare -A OPT_MAP_TYPE     # Map of the argument type for each option ("--help") to ("" | ":" | "::")
+USAGE=""                    # A description of how to use each parameter.
+
+# ==== mk_opt() ====
+# Add an item to the options arrays
+# 
+# Parameters:
+#   $1  Short symbol, eg a
+#   $2  Long symbol, eg apple
+#   $3  Option Type, eg ::
+#   $4  Argument Type Description, eg <ou_id>
+#   $5  Description
+#   $6  Optional: Override the default callback of 'cb_$2 '
+function mk_opt() {
+    if [ -n "$1" ]; then
+        OPT_MAP_ALIAS[$1]=$2
+    fi
+    OPT_MAP_SHORT[$2]=$1
+    OPT_MAP_TYPE[$2]=$3
+    if [ -n "$6" ]; then
+        OPT_MAP_CALLBACK[$2]="$6"
+    else    
+        OPT_MAP_CALLBACK[$2]="cb_$2 "
+    fi
+    
+    if [ -n "$1" ]; then
+        USAGE+=" -$1 --$2 $4 ~!~ $5\n"
+    else 
+        USAGE+="    --$2 $4 ~!~ $5\n"
+    fi
+}
+
+# Table of command line options and their callbacks
+mk_opt "a" "arga"   ":"  "<N>"  "This has a required argument"  "export VALUE_A="
+mk_opt "b" "argb"   "::" "[X]"  "This has an optional argument"
+mk_opt "c" "argc"   ""   ""     "This has no argument" "true #Hacky no-op callback "
+mk_opt ""  "argd"   ":"   "<N>" "This has no shorthand" 
+mk_opt "h" "help"   ""   ""     "Display this help text"
+
+
+# Construct getopt format string
+OPT_SHORT="-o "
+OPT_LONG="--long "
+for LONG in ${!OPT_MAP_TYPE[@]}; do
+    SHORT=${OPT_MAP_SHORT[$LONG]}
+    if [ -n "$SHORT" ]; then
+        OPT_SHORT+="${SHORT}${OPT_MAP_TYPE[$LONG]}"
+    fi
+    OPT_LONG+="${LONG}${OPT_MAP_TYPE[$LONG]},"
+done
+
+# Use getopt to parse the command line arguments
+TMP=`getopt $OPT_SHORT $OPT_LONG -n $(basename $0) -- $@`
+if [ "$?" -ne 0 ]; then 
+    # The user provided illegal arguments
+    usage
+    exit 1
+fi
+
+# Apply the result from getopt to the parameters $@
+eval set -- "$TMP"
+while true; do
+    if [[ $1 = "--" ]]; then
+        # All arguments parsed
+        shift;
+        break;
+    fi 
+
+    # Check if it is a short option
+    if [[ $1 =~ ^\-[a-zA-Z0-9]$ ]]; then
+        LONG=${OPT_MAP_ALIAS[${1:1:1}]}
+        CB=${OPT_MAP_CALLBACK[$LONG]}
+    fi
+    # Check if it is a long option
+    if [[ $1 =~ \--[a-zA-Z0-9][a-zA-Z0-9] ]]; then
+        LONG=${1:2}
+        CB=${OPT_MAP_CALLBACK[$LONG]}
+        if [ -z "${CB}" ]; then
+            LONG=
+        fi
+    fi
+    
+    # Validate that the lookup succeeded
+    if [ -z "$LONG" ]; then
+        echo "Failed to process argument $1" >&2;
+        exit 1
+    fi
+    
+    # Check if there should be an argument
+    if [[ ":" == ${OPT_MAP_TYPE[$LONG]:0:1} ]]; then
+        # Pass in the argument for : and :: type options
+        ARG=$2;
+        shift 2;
+    else
+        ARG=
+        shift;
+    fi
+    
+    # Call the callback and pass the argument, if it exists
+    ${CB}$ARG 
+done
+
+# Validate that everything was parsed
+if [ $# -gt 0 ]; then
+    echo "Unexpected value provided after arguments" >&2
+    usage
+    exit 1
+fi
+
+
+# Now do something useful!
+echo "Values:"
+echo "A: $VALUE_A"
+echo "B: $VALUE_B"
+echo "C: N/A"
+echo "D: $VALUE_D"
