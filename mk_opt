@@ -7,7 +7,7 @@ function usage() {
 cat << EOF 
   Usage: $(basename $0) [options]
 
-  Purge teams from the database that have been scheduled for deletion.
+  Example usage text.
   
   Options:
 EOF
